@@ -15,29 +15,35 @@ DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
 # ===============================================================
 
 def fetch_market_and_fund_data():
-    """Lấy dữ liệu thật từ thị trường và các quỹ thông qua Vnstock"""
+    """Lấy dữ liệu thật từ thị trường và các quỹ thông qua Vnstock với cơ chế Fallback"""
     try:
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
         
-        # 1. Lấy dữ liệu VN-Index (Nguồn: TCBS hoặc DNSE tích hợp trong Vnstock)
-        df_index = vs.stock_historical_data(symbol='VNINDEX', start_date=start_date, end_date=end_date, source='TCBS')
-        latest_index = df_index.iloc[-1].to_dict() if not df_index.empty else {}
+        # Thử nguồn DNSE trước vì ít chặn IP từ GitHub Actions hơn TCBS
+        primary_source = 'DNSE' 
+        
+        # 1. Lấy dữ liệu VN-Index
+        df_index = vs.stock_historical_data(symbol='VNINDEX', start_date=start_date, end_date=end_date, source=primary_source)
+        if df_index.empty:
+            raise ValueError(f"Dữ liệu VNINDEX bị rỗng từ nguồn {primary_source}")
+            
+        latest_index = df_index.iloc[-1].to_dict()
 
-        # 2. Lấy dữ liệu các Chứng chỉ quỹ / ETF lớn (Ví dụ: FUEVNVND, E1VFVN30)
-        # Thay vì cào HTML rác, Vnstock trả về DataFrame cấu trúc rõ ràng
+        # 2. Lấy dữ liệu các Chứng chỉ quỹ / ETF lớn
         funds = ['FUEVNVND', 'E1VFVN30', 'FUESSVFL']
         fund_data_summary = []
         
         for fund in funds:
-            df_fund = vs.stock_historical_data(symbol=fund, start_date=start_date, end_date=end_date, source='TCBS')
+            df_fund = vs.stock_historical_data(symbol=fund, start_date=start_date, end_date=end_date, source=primary_source)
             if not df_fund.empty:
                 latest_price = df_fund.iloc[-1]['close']
                 prev_price = df_fund.iloc[-2]['close'] if len(df_fund) > 1 else latest_price
                 pct_change = ((latest_price - prev_price) / prev_price) * 100
                 fund_data_summary.append(f"• {fund}: {latest_price:,.0f}đ ({pct_change:+.2f}%)")
+            else:
+                fund_data_summary.append(f"• {fund}: Không có dữ liệu")
         
-        # Đóng gói dữ liệu thô dạng chuỗi văn bản sạch để gửi cho AI
         market_context = (
             f"Báo cáo ngày: {end_date}\n"
             f"Chỉ số VNINDEX: {latest_index.get('close', 'N/A')} (Khối lượng: {latest_index.get('volume', 'N/A')})\n"
@@ -46,7 +52,9 @@ def fetch_market_and_fund_data():
         return market_context
         
     except Exception as e:
-        print(f"Lỗi khi trích xuất dữ liệu tài chính: {e}")
+        # Ghi log chi tiết lỗi ra console của GitHub Actions để dễ bắt bệnh
+        error_msg = f"Lỗi chi tiết khi gọi Vnstock: {str(e)}"
+        print(error_msg) 
         return None
 
 def analyze_with_deepseek(raw_data):
