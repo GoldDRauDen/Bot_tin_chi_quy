@@ -15,7 +15,7 @@ DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
 
 # ===============================================================
 
-def _get_history(symbol, start_date, end_date, source='KBS'):
+def _get_history(symbol, start_date, end_date, source='VCI'):
     """
     Hàm helper gọi API mới của vnstock (Quote.history).
     Dùng nguồn KBS vì đây là nguồn được vnstock khuyến nghị chạy ổn định
