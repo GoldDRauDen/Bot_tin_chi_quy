@@ -1,3 +1,4 @@
 vnstock==4.0.2
+vnstock_ezchart
 requests
 pandas
