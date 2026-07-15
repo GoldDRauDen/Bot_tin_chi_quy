@@ -1,125 +1,82 @@
 import os
-import time
+import traceback
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
+# Import thư viện vnstock thế hệ mới (Unified UI - vnstock >= 3.x/4.x)
+from vnstock import Quote
 
 # ======================= CẤU HÌNH BẢO MẬT =======================
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+# Khuyên dùng: Lưu vào Environment Variables. Điền token của bạn nếu test nhanh.
+# CHỈ ĐỌC TỪ BIẾN MÔI TRƯỜNG - KHÔNG ĐỂ LỘ KEY TRÊN GITHUB
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')    
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
+
 # ===============================================================
 
-def get_historical_data_robust(symbol, start_date, end_date):
+def _get_history(symbol, start_date, end_date, source='KBS'):
     """
-    Hàm lấy dữ liệu thích ứng thông minh (Universal Wrapper).
-    Tự động thử các phiên bản Vnstock khác nhau, nếu lỗi thì gọi thẳng API TCBS.
+    Hàm helper gọi API mới của vnstock (Quote.history).
+    Dùng nguồn KBS vì đây là nguồn được vnstock khuyến nghị chạy ổn định
+    trên môi trường server/cloud (như GitHub Actions), ít bị chặn IP hơn VCI.
+    Chuẩn hoá tên cột về chữ thường để tránh lỗi KeyError nếu API đổi casing.
     """
-    # --- TẦNG 1: Thử theo chuẩn Vnstock V3 mới nhất ---
-    try:
-        from vnstock import vnstock
-        vs = vnstock()
-        df = vs.stock(symbol=symbol, source='TCBS').trading.historical_data(start_date=start_date, end_date=end_date)
-        if df is not None and not df.empty:
-            print(f"[{symbol}] Lấy dữ liệu thành công bằng Vnstock V3.")
-            return df
-    except Exception:
-        pass
-
-    try:
-        from vnstock import Vnstock
-        vs = Vnstock()
-        df = vs.stock(symbol=symbol, source='TCBS').trading.historical_data(start_date=start_date, end_date=end_date)
-        if df is not None and not df.empty:
-            print(f"[{symbol}] Lấy dữ liệu thành công bằng Vnstock V3 (Alt).")
-            return df
-    except Exception:
-        pass
-
-    # --- TẦNG 2: Thử theo chuẩn Vnstock Legacy (v0.2.x) ---
-    try:
-        import vnstock as vs_legacy
-        if hasattr(vs_legacy, 'stock_historical_data'):
-            df = vs_legacy.stock_historical_data(symbol=symbol, start_date=start_date, end_date=end_date, source='TCBS')
-            if df is not None and not df.empty:
-                print(f"[{symbol}] Lấy dữ liệu thành công bằng Vnstock Legacy.")
-                return df
-    except Exception:
-        pass
-
-    # --- TẦNG 3 (Bất tử): Tự gọi thẳng API công khai của TCBS (Không cần thư viện) ---
-    try:
-        # Chuyển đổi ngày sang UNIX Timestamp (giây)
-        from_ts = int(time.mktime(time.strptime(start_date, "%Y-%m-%d")))
-        to_ts = int(time.mktime(time.strptime(end_date, "%Y-%m-%d")))
-        
-        url = f"https://apipublish.tcbs.com.vn/api/v1/ticker-joint/history?ticker={symbol}&from={from_ts}&to={to_ts}&resolution=D"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            if 'c' in data and len(data['c']) > 0:
-                # Tạo DataFrame từ cấu trúc JSON của TradingView UDF từ TCBS
-                df = pd.DataFrame({
-                    'time': [datetime.fromtimestamp(t).strftime('%Y-%m-%d') for t in data['t']],
-                    'open': data['o'],
-                    'high': data['h'],
-                    'low': data['l'],
-                    'close': data['c'],
-                    'volume': data['v']
-                })
-                print(f"[{symbol}] Lấy dữ liệu thành công trực tiếp từ API gốc TCBS.")
-                return df
-    except Exception as e:
-        print(f"Lỗi khi cố gắng gọi API trực tiếp cho {symbol}: {e}")
-
-    return pd.DataFrame()
+    quote = Quote(symbol=symbol, source=source)
+    df = quote.history(start=start_date, end=end_date, interval='1D')
+    if df is not None and not df.empty:
+        df.columns = [str(c).lower() for c in df.columns]
+    return df
 
 
 def fetch_market_and_fund_data():
-    """Hợp nhất dữ liệu thị trường sử dụng hàm Robust Wrapper"""
-    try:
-        end_date = datetime.now().strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
-        
-        # 1. Lấy dữ liệu VN-Index
-        df_index = get_historical_data_robust('VNINDEX', start_date, end_date)
-        if df_index.empty:
-            raise ValueError("Không thể lấy dữ liệu VNINDEX từ bất kỳ nguồn nào.")
-            
-        latest_index = df_index.iloc[-1].to_dict()
+    """Lấy dữ liệu thật từ thị trường và các quỹ thông qua Vnstock (API hợp nhất - Unified UI)"""
+    end_date = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d')
 
-        # 2. Lấy dữ liệu các Chứng chỉ quỹ / ETF lớn
-        funds = ['FUEVNVND', 'E1VFVN30', 'FUESSVFL']
-        fund_data_summary = []
-        
-        for fund in funds:
-            df_fund = get_historical_data_robust(fund, start_date, end_date)
-            if not df_fund.empty:
+    # 1. Lấy dữ liệu VN-Index
+    latest_index = {}
+    try:
+        df_index = _get_history('VNINDEX', start_date, end_date)
+        if df_index is not None and not df_index.empty:
+            latest_index = df_index.iloc[-1].to_dict()
+        else:
+            print("Cảnh báo: Không lấy được dữ liệu VNINDEX (DataFrame rỗng).")
+    except Exception:
+        print("Lỗi khi lấy dữ liệu VNINDEX:")
+        print(traceback.format_exc())
+
+    # 2. Lấy dữ liệu các Chứng chỉ quỹ / ETF lớn (Ví dụ: FUEVNVND, E1VFVN30)
+    funds = ['FUEVNVND', 'E1VFVN30', 'FUESSVFL']
+    fund_data_summary = []
+
+    for fund in funds:
+        try:
+            df_fund = _get_history(fund, start_date, end_date)
+            if df_fund is not None and not df_fund.empty:
                 latest_price = df_fund.iloc[-1]['close']
                 prev_price = df_fund.iloc[-2]['close'] if len(df_fund) > 1 else latest_price
-                pct_change = ((latest_price - prev_price) / prev_price) * 100
+                pct_change = ((latest_price - prev_price) / prev_price) * 100 if prev_price else 0
                 fund_data_summary.append(f"• {fund}: {latest_price:,.0f}đ ({pct_change:+.2f}%)")
             else:
-                fund_data_summary.append(f"• {fund}: Không có dữ liệu")
-        
-        market_context = (
-            f"Báo cáo ngày: {end_date}\n"
-            f"Chỉ số VNINDEX: {latest_index.get('close', 'N/A')} (Khối lượng: {latest_index.get('volume', 'N/A')})\n"
-            f"Dữ liệu các quỹ nổi bật:\n" + "\n".join(fund_data_summary)
-        )
-        return market_context
-        
-    except Exception as e:
-        print(f"Lỗi hệ thống thu thập dữ liệu: {e}")
+                print(f"Cảnh báo: Không lấy được dữ liệu cho {fund} (DataFrame rỗng).")
+        except Exception:
+            print(f"Lỗi khi lấy dữ liệu quỹ {fund}:")
+            print(traceback.format_exc())
+
+    # Nếu không lấy được cả VNINDEX lẫn bất kỳ quỹ nào -> coi như thất bại toàn phần
+    if not latest_index and not fund_data_summary:
         return None
 
+    market_context = (
+        f"Báo cáo ngày: {end_date}\n"
+        f"Chỉ số VNINDEX: {latest_index.get('close', 'N/A')} (Khối lượng: {latest_index.get('volume', 'N/A')})\n"
+        f"Dữ liệu các quỹ nổi bật:\n" + ("\n".join(fund_data_summary) if fund_data_summary else "Không có dữ liệu quỹ.")
+    )
+    return market_context
 
 def analyze_with_deepseek(raw_data):
-    """Đưa dữ liệu vào DeepSeek"""
+    """Đưa dữ liệu thật vào DeepSeek để phân tích theo tư duy 0.1%"""
     if not DEEPSEEK_API_KEY:
         return "Lỗi: Chưa cấu hình API Key cho DeepSeek."
 
@@ -129,6 +86,7 @@ def analyze_with_deepseek(raw_data):
         "Content-Type": "application/json"
     }
 
+    # Prompt nâng cấp bắt buộc AI tư duy theo dòng tiền và độ lệch giá
     prompt = f"""Bạn là một giám đốc khối phân tích quỹ đầu tư thuộc top 0.1% thị trường Việt Nam.
 Dựa trên dữ liệu tài chính thực tế dưới đây, hãy lập bản tin phân tích sáng nay (7-10 dòng):
 - Đánh giá nhanh xu hướng VN-Index và tác động đến các nhóm chứng chỉ quỹ.
@@ -143,7 +101,7 @@ Dữ liệu đầu vào:
     payload = {
         "model": "deepseek-chat",
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2,
+        "temperature": 0.2, # Giảm sáng tạo để AI tập trung vào logic tài chính số liệu
         "max_tokens": 800
     }
 
@@ -156,9 +114,8 @@ Dữ liệu đầu vào:
     except Exception as e:
         return f"Lỗi kết nối hệ thống AI: {e}"
 
-
 def send_telegram(text):
-    """Gửi Telegram"""
+    """Gửi báo cáo phân tích chất lượng cao về Telegram cá nhân"""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
@@ -171,7 +128,6 @@ def send_telegram(text):
     except Exception as e:
         print(f"Không thể gửi tin nhắn Telegram: {e}")
 
-
 if __name__ == "__main__":
     print("Đang quét dữ liệu thị trường...")
     market_data = fetch_market_and_fund_data()
@@ -182,4 +138,4 @@ if __name__ == "__main__":
         send_telegram(final_report)
         print("Đã gửi báo cáo thành công về Telegram!")
     else:
-        send_telegram("⚠️ Hệ thống cốt lõi lỗi: Không thể trích xuất dữ liệu.")
+        send_telegram("⚠️ Hệ thống cốt lõi lỗi: Không thể trích xuất dữ liệu từ Vnstock.")
