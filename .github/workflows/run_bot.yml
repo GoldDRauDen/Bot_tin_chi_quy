@@ -1,0 +1,36 @@
+name: Daily Fund Analysis Bot
+
+on:
+  schedule:
+    # 00:00 UTC tương đương với 07:00 sáng giờ Việt Nam (UTC+7)
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Dòng này cho phép bạn vào giao diện GitHub bấm nút "Chạy thử" bất kỳ lúc nào
+
+jobs:
+  run-finance-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Bước 1: Tải mã nguồn từ Repo về máy chủ ảo của GitHub
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # Bước 2: Khởi tạo môi trường Python
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    # Bước 3: Cài đặt vnstock và các thư viện liên quan
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # Bước 4: Kích hoạt Bot chạy và truyền các Secret Key một cách an toàn
+    - name: Execute Python Bot
+      env:
+        TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      run: python bot.py
