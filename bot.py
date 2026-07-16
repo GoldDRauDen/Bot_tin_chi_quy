@@ -11,20 +11,37 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 # ===============================================================
 
 # ======================= DANH SACH MODEL (CAP NHAT 2026) =======================
-# Thu tu uu tien: alias on dinh nhat -> GA 2.5 -> GA 3.x
-# - google luon cap nhat alias "*-latest" tro ve model GA moi nhat
-# - gemini-1.5* da shut down -> KHONG dung
-# - gemini-pro (1.0) khong con duoc ho tro -> KHONG dung
 MODELS_FALLBACK = [
-    "gemini-flash-latest",         # alias -> tro ve GA flash moi nhat (uu tien 1)
-    "gemini-2.5-flash",            # GA, on dinh, free tier friendly
-    "gemini-2.5-pro",              # GA, on dinh
-    "gemini-2.5-flash-lite",       # nhe, re, free tier
-    "gemini-3.1-flash-lite",       # GA moi (May 2026)
-    "gemini-3.5-flash",            # GA moi nhat (May 2026)
-    "gemini-pro-latest",           # alias -> tro ve GA pro moi nhat
+    "gemini-flash-latest",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-pro-latest",
 ]
 # =============================================================================
+
+# ======================= FIX v12: SYMBOL + SOURCE =======================
+# Loi cu:
+#   1. Symbol "FUEVNVND" sai chinh ta -> phai la "FUEVFVND" (F thay vi N)
+#      (ETF VinaCapital VN30 - ky hieu chinh thuc tren HOSE la FUEVFVND)
+#   2. Source "TCBS" va "SSI" da bi loai bo khoi vnstock 4.0.4
+#      (chi con: kbs, vci, msn, dnse, binance, fmp, fmarket)
+#   3. KBS la nguon moi, rat on dinh cho ETF
+# ============================================================================
+
+# Symbol dung cua cac quy (theo HOSE)
+FUNDS_SYMBOLS = {
+    'FUEVFVND': 'FUEVFVND',  # SSIAM VinaCapital VN30 (FIX: cu la FUEVNVND - sai)
+    'E1VFVN30': 'E1VFVN30',  # VFMVN30 ETF (HSX)
+    'FUESSVFL': 'FUESSVFL',  # SSIAM VNFIN LEAD
+}
+
+# Nguon du lieu uu tien (vnstock 4.0.4+)
+# VCI: on dinh, support tot ETF
+# KBS: moi, rat on dinh, free
+DATA_SOURCES = ['KBS', 'VCI', 'MSN']
 
 
 def is_trading_day():
@@ -35,18 +52,27 @@ def is_trading_day():
 
 
 def _get_history(symbol, start_date, end_date):
-    sources = ['VCI', 'TCBS', 'SSI']
-    for source in sources:
+    """Thu lay du lieu tu nhieu nguon, uu tien KBS (tot nhat cho ETF).
+    Tra ve DataFrame hoac None neu tat ca nguon fail."""
+    for source in DATA_SOURCES:
         try:
             q = Quote(symbol=symbol, source=source)
             df = q.history(start=start_date, end=end_date, interval='1D')
             if df is not None and not df.empty:
+                # Chuan hoa column names ve lowercase
                 df.columns = [str(c).lower() for c in df.columns]
-                return df
+                # Dam bao co cot 'close' (KBS tra 'close', VCI cung 'close')
+                if 'close' in df.columns:
+                    return df
         except Exception:
             continue
-    print(f"Loi: Khong the lay du lieu {symbol} tu tat ca cac nguon.")
+    print(f"⚠️ Khong the lay du lieu {symbol} tu cac nguon {DATA_SOURCES}.")
     return None
+
+
+def _get_index_history(symbol, start_date, end_date):
+    """Lay du lieu chi so (VNINDEX/...): giu nguyen logic cu vi VCI/KBS deu OK."""
+    return _get_history(symbol, start_date, end_date)
 
 
 def fetch_market_and_fund_data():
@@ -54,20 +80,22 @@ def fetch_market_and_fund_data():
     start_date = (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d')
 
     latest_index = {}
-    df_index = _get_history('VNINDEX', start_date, end_date)
+    df_index = _get_index_history('VNINDEX', start_date, end_date)
     if df_index is not None and not df_index.empty:
         latest_index = df_index.iloc[-1].to_dict()
 
-    funds = ['FUEVNVND', 'E1VFVN30', 'FUESSVFL']
     fund_data_summary = []
-
-    for fund in funds:
-        df_fund = _get_history(fund, start_date, end_date)
+    # Dung key (display name) -> symbol that
+    for fund_name, fund_symbol in FUNDS_SYMBOLS.items():
+        df_fund = _get_history(fund_symbol, start_date, end_date)
         if df_fund is not None and not df_fund.empty:
             latest_price = df_fund.iloc[-1]['close']
             prev_price = df_fund.iloc[-2]['close'] if len(df_fund) > 1 else latest_price
             pct_change = ((latest_price - prev_price) / prev_price) * 100 if prev_price else 0
-            fund_data_summary.append(f"- {fund}: {latest_price:,.0f} VND ({pct_change:+.2f}%)")
+            fund_data_summary.append(f"- {fund_name}: {latest_price:,.2f} VND ({pct_change:+.2f}%)")
+        else:
+            # Ghi nhan de log, khong gay crash
+            fund_data_summary.append(f"- {fund_name}: khong co du lieu (da thu {DATA_SOURCES})")
 
     if not latest_index and not fund_data_summary:
         return None
@@ -75,13 +103,14 @@ def fetch_market_and_fund_data():
     market_context = (
         f"Bao cao ngay: {end_date}\n"
         f"Chi so VNINDEX: {latest_index.get('close', 'N/A')} (Khoi luong: {latest_index.get('volume', 'N/A')})\n"
-        f"Du lieu cac quy noi bat:\n" + ("\n".join(fund_data_summary) if fund_data_summary else "Khong co du lieu quy.")
+        f"Du lieu cac quy noi bat:\n" + "\n".join(fund_data_summary)
     )
     return market_context
 
 
+# ======================= PHAN AI (giu nguyen tu v11) =======================
+
 def _try_single_request(url, payload, headers, model_name, endpoint_label):
-    """Thu mot cuoc goi don le, tra ve (ok, text, status_code)."""
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=30)
         if response.status_code == 200:
@@ -92,7 +121,6 @@ def _try_single_request(url, payload, headers, model_name, endpoint_label):
             except (KeyError, IndexError, ValueError) as parse_err:
                 return False, f"parse_error:{parse_err}", response.status_code
         else:
-            # Lay chi tiet loi tu response neu co
             try:
                 err_body = response.json()
                 err_msg = err_body.get('error', {}).get('message', response.text[:200])
@@ -108,9 +136,6 @@ def _try_single_request(url, payload, headers, model_name, endpoint_label):
 
 
 def _discover_available_models():
-    """Tu dong goi listModels de lay danh sach model con hoat dong cho key nay.
-    Tra ve list string model_id (uu tien GA + generateContent support).
-    Rat huu ich khi key free-tier chi expose mot subset model."""
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
         r = requests.get(url, timeout=15)
@@ -119,16 +144,14 @@ def _discover_available_models():
             return None
         data = r.json()
         models = data.get('models', [])
-        # Loc: chi lay model ho tro generateContent va KHONG PHAI embedding/image/audio
         valid = []
         for m in models:
-            name = m.get('name', '')  # dang "models/gemini-xxx"
+            name = m.get('name', '')
             methods = m.get('supportedGenerationMethods', []) or m.get('capabilities', [])
             if not name:
                 continue
             if methods and 'generateContent' not in methods:
                 continue
-            # bo qua model embedding/image/audio/robotics
             short = name.split('/')[-1]
             skip_keywords = ['embedding', 'image', 'imagen', 'tts', 'robotics', 'veo',
                              'lyria', 'nano-banana', 'aqa', 'computer-use']
@@ -168,21 +191,16 @@ Du lieu:
     }
     headers = {"Content-Type": "application/json"}
 
-    # ===== GIAI DOAN 1: Thu listModels de uu tien model con song =====
-    # Neu key bi gioi han (free tier thuong chi expose 1 subset) thi listModels se cho biet chinh xac
     print("Dang kiem tra danh sach model kha dung cho API key...")
     discovered = _discover_available_models()
 
-    # Sap xep model can thu: discovered (neu co) → fallback list
     models_to_try = []
     if discovered:
         print(f"📋 listModels tra ve {len(discovered)} model kha dung.")
-        # uu tien alias *-latest, sau do GA, roi them fallback list
         latest_aliases = [m for m in discovered if m.endswith('-latest')]
         others = [m for m in discovered if not m.endswith('-latest')]
         models_to_try.extend(latest_aliases)
         models_to_try.extend(others)
-        # them nhung model trong MODELS_FALLBACK chua co (de co nhieu lua chon)
         for m in MODELS_FALLBACK:
             if m not in models_to_try:
                 models_to_try.append(m)
@@ -190,10 +208,8 @@ Du lieu:
         print("⚠️ Khong the listModels, su dung fallback list cu.")
         models_to_try = list(MODELS_FALLBACK)
 
-    # ===== GIAI DOAN 2: Vong lap thu tung model voi ca v1beta va v1 =====
     error_logs = []
     for model in models_to_try:
-        # Bo qua model 1.5 (da shut down) va gemini-pro (1.0)
         if model.startswith('gemini-1.5') or model == 'gemini-pro' or model == 'gemini-1.0-pro':
             continue
 
@@ -209,10 +225,8 @@ Du lieu:
                 print(f"✅ AI ket noi thanh cong voi model: {model} (endpoint: {endpoint})")
                 return result
             else:
-                # Neu 404 -> bo qua, khong can log noi endpoint khac cung 404
                 error_logs.append(f"[{model}/{endpoint}] {result}")
                 if status == 404:
-                    # 404 o v1beta cung se 404 o v1 -> break de khong spam
                     break
 
     return f"Loi toan bo he thong AI. Chi tiet: {', '.join(error_logs)}"
@@ -236,7 +250,7 @@ def send_telegram(text):
 
 
 if __name__ == "__main__":
-    print("### BOT VERSION: v11-gemini-fallback-2026-07-16 ###")
+    print("### BOT VERSION: v12-symbol-source-fix-2026-07-16 ###")
 
     if not is_trading_day():
         print("Hom nay la cuoi tuan, thi truong dong cua. Dung bot.")
