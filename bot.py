@@ -2,7 +2,8 @@ import os
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
-from vnstock import Vnstock 
+# Import dung chuan vnstock.api de sach log va khong bi spam canh bao
+from vnstock.api.quote import Quote 
 
 # ======================= CAU HINH BAO MAT =======================
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')    
@@ -19,24 +20,18 @@ def is_trading_day():
 
 def _get_history(symbol, start_date, end_date):
     """
-    Lay du lieu lich su voi co che Fallback (tu dong thu nhieu nguon).
-    Dung kien truc V4 moi nhat.
+    Lay du lieu dung chuan vnstock.api.
+    Su dung nguon VCI theo dung thong bao va huong dan tu Vnstock V4 core.
     """
     try:
-        vn = Vnstock()
-        sources = ['VCI', 'TCBS', 'SSI']
-        
-        for source in sources:
-            try:
-                stock_api = vn.stock(symbol=symbol, source=source)
-                df = stock_api.quote.history(start=start_date, end=end_date)
-                if df is not None and not df.empty:
-                    df.columns = [str(c).lower() for c in df.columns]
-                    return df
-            except Exception:
-                continue # Loi nguon nay thi tu dong chuyen nguon khac
+        # Ap dung cu phap New tuong thich 100% voi ban open-source hien tai
+        q = Quote(symbol=symbol, source='VCI')
+        df = q.history(start=start_date, end=end_date, interval='1D')
+        if df is not None and not df.empty:
+            df.columns = [str(c).lower() for c in df.columns]
+            return df
     except Exception as e:
-        print(f"Loi khoi tao Vnstock: {e}")
+        print(f"Loi khi tai ma {symbol}: {e}")
     return None
 
 def fetch_market_and_fund_data():
@@ -122,11 +117,10 @@ def send_telegram(text):
     requests.post(url, json=payload, timeout=15)
 
 if __name__ == "__main__":
-    print("### BOT VERSION: v5-pro-2026-07-16 ###")
+    print("### BOT VERSION: v6-clean-api-2026-07-16 ###")
     
     if not is_trading_day():
         print("Hom nay la cuoi tuan, thi truong dong cua. Dung bot.")
-        send_telegram("Thong bao: Hom nay la cuoi tuan, thi truong nghi giao dich. Bot tam dung quet du lieu.")
         exit(0)
 
     print("Dang quet du lieu thi truong...")
