@@ -95,42 +95,50 @@ def _build_prompt(raw_data, retry=False):
         # Prompt don gian hon cho retry (phong tru prompt qua phuc tap gay "no idea")
         return f"""Phan tich ngan gon thi truong chung khoan Viet Nam ngay hom nay.
 
-Du lieu:
-{raw_data}
-Hay viet 7-10 cau phan tich (tieng Viet CO dau, khong Markdown).
-    return f"""Ban la chuyen gia phan tich tai chinh hang dau. Hay lap ban tin phan tich chi tiet cho thi truong chung khoan Viet Nam.
-
-QUY TAC BAT BUOC:
-1. Dau ra phai la TIENG VIET CO DAU chuan Unicode UTF-8.
-2. Khong su dung Markdown: khong *, khong _, khong #, khong [], khong ```.
-3. Viet tu 7 den 10 dong, moi dong la mot y phan tich doc lap.
-4. Moi dong bat dau bang mot emoji.
-5. Moi dong chi gom mot cau ngan gon, de doc tren Messenger, Zalo hoac Telegram.
-6. Khong viet giai thich them truoc hoac sau ban tin.
-
-CAU TRUC BAN TIN:
-📈 Dong 1: Tong quan thi truong hom nay.
-📊 Dong 2: Phan tich VN-Index (xu huong, bien dong).
-💰 Dong 3: Phan tich quy FUEVFVND (dong tien, suc manh).
-📉 Dong 4: Phan tich quy E1VFVN30 (so sanh voi FUEVFVND).
-🏦 Dong 5: Phan tich quy FUESSVFL (xu huong rieng).
-💵 Dong 6: Nhan dinh dong tien lon trong ngay.
-⚠️ Dong 7: Canh bao rui ro (thanh khoan, bien dong, ap luc ban).
-🎯 Dong 8: Goi y chien luoc ngan han cho nha dau tu.
-⭐ Dong 9: Quy tiem nang nhat trong cac quy da phan tich va ly do.
-📝 Dong 10: Ket luan tong the.
-
-YEU CAU NOI DUNG:
-- Phan tich dua tren so lieu duoc cung cap.
-- Neu mot quy hoac chi so khong co du lieu thi ghi ro "Khong co du lieu de danh gia", khong duoc tu suy dien.
-- Khong lap lai y giua cac dong.
-- Khong viet chung chung, moi dong phai co nhan dinh cu the.
-- Su dung cac gia tri va so lieu trong du lieu ben duoi neu co.
-
-Du lieu thi truong:
+Dữ liệu:
 {raw_data}
 
-Chi tra ve ban tin, khong them bat ky giai thich nao."""
+Hãy viết từ 7 đến 10 câu bằng tiếng Việt có dấu chuẩn Unicode UTF-8.
+Mỗi câu trên một dòng.
+Mỗi dòng bắt đầu bằng một emoji.
+Không sử dụng Markdown.
+Chỉ trả về bản tin."""
+    
+    return f"""Bạn là chuyên gia phân tích tài chính hàng đầu.
+
+Hãy lập bản tin phân tích chi tiết cho thị trường chứng khoán Việt Nam.
+
+QUY TẮC BẮT BUỘC:
+1. Toàn bộ đầu ra phải là tiếng Việt có dấu chuẩn Unicode UTF-8.
+2. Không được viết tiếng Việt không dấu.
+3. Không sử dụng Markdown.
+4. Viết từ 7 đến 10 dòng.
+5. Mỗi dòng bắt đầu bằng một emoji.
+6. Mỗi dòng chỉ gồm một câu.
+7. Không thêm lời mở đầu hoặc kết thúc.
+
+CẤU TRÚC:
+📈 Dòng 1: Tổng quan thị trường.
+📊 Dòng 2: Phân tích VN-Index.
+💰 Dòng 3: Phân tích FUEVFVND.
+📉 Dòng 4: Phân tích E1VFVN30.
+🏦 Dòng 5: Phân tích FUESSVFL.
+💵 Dòng 6: Đánh giá dòng tiền.
+⚠️ Dòng 7: Cảnh báo rủi ro.
+🎯 Dòng 8: Gợi ý chiến lược.
+⭐ Dòng 9: Quỹ tiềm năng nhất.
+📝 Dòng 10: Kết luận.
+
+YÊU CẦU:
+- Chỉ sử dụng dữ liệu được cung cấp.
+- Không tự suy diễn.
+- Không lặp ý.
+- Nếu thiếu dữ liệu thì ghi rõ "Không có dữ liệu để đánh giá".
+
+Dữ liệu thị trường:
+{raw_data}
+
+Chi tra ve ban tin, khong them bat ky giai thich nao.
 
 Hay bat dau viet ngay:"""
 
