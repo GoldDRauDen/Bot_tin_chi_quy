@@ -29,6 +29,7 @@ jobs:
 
     # Bước 4: Kích hoạt Bot chạy và truyền các Secret Key một cách an toàn
     - name: Execute Python Bot
+      working-directory: ./bot_daily
       env:
         TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
