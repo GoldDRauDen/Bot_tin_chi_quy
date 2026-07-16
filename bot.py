@@ -7,7 +7,6 @@ from vnstock.api.quote import Quote
 # ======================= CAU HINH BAO MAT =======================
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')    
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-# Chuyen sang dung Gemini API mien phi
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 # ===============================================================
 
@@ -18,9 +17,6 @@ def is_trading_day():
     return True
 
 def _get_history(symbol, start_date, end_date):
-    """
-    Lay du lieu kem co che tu dong chuyen nguon (Fallback) neu nguon chinh bi loi
-    """
     sources = ['VCI', 'TCBS', 'SSI']
     for source in sources:
         try:
@@ -30,7 +26,7 @@ def _get_history(symbol, start_date, end_date):
                 df.columns = [str(c).lower() for c in df.columns]
                 return df
         except Exception:
-            continue # Loi thi am tham bo qua va thu nguon tiep theo
+            continue 
     print(f"Loi: Khong the lay du lieu {symbol} tu tat ca cac nguon.")
     return None
 
@@ -65,7 +61,6 @@ def fetch_market_and_fund_data():
     return market_context
 
 def analyze_with_gemini(raw_data):
-    """Phan tich du lieu bang Google Gemini 1.5 Flash (Mien phi)"""
     if not GEMINI_API_KEY:
         return "Loi: Chua cau hinh GEMINI_API_KEY tren GitHub Secrets."
 
@@ -75,13 +70,13 @@ def analyze_with_gemini(raw_data):
     prompt = f"""Ban la giam doc khoi phan tich quy dau tu.
 Dua tren du lieu thuc te duoi day, hay lap ban tin phan tich (7-10 dong).
 
-YEU CAU BAT BUOC: Toan bo cau tra loi cua ban phai duoc viet bang TIENG VIET KHONG DAU (loai bo hoan toan dau tieng Viet) de tranh loi font.
+YEU CAU BAT BUOC 1: Toan bo cau tra loi cua ban phai duoc viet bang TIENG VIET KHONG DAU (loai bo hoan toan dau tieng Viet).
+YEU CAU BAT BUOC 2: KHONG dung cac ky tu Markdown nhu dau sao (*), dau gach duoi (_), dau thang (#). Chi dung van ban thuong va emoji.
 
 Noi dung can co:
 - Danh gia nhanh xu huong VN-Index.
 - Phan tich dong luc cua cac quy ETF (FUEVNVND, E1VFVN30...). 
 - Canh bao rui ro va chi ra quy tiem nang nhat.
-- Dung dinh dang Markdown va cac emoji phu hop.
 
 Du lieu:
 {raw_data}"""
@@ -108,13 +103,22 @@ def send_telegram(text):
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": text,
-        "parse_mode": "Markdown",
+        # Bỏ parse_mode="Markdown" để tránh lỗi hắt hủi định dạng từ Telegram
         "disable_web_page_preview": True
     }
-    requests.post(url, json=payload, timeout=15)
+    
+    try:
+        res = requests.post(url, json=payload, timeout=15)
+        if res.status_code == 200:
+            print("✅ Da gui bao cao thanh cong ve Telegram!")
+        else:
+            # In ra lỗi chi tiết để bắt bệnh nếu có
+            print(f"❌ LOI GUI TELEGRAM (Ma loi {res.status_code}): {res.text}")
+    except Exception as e:
+        print(f"❌ LOI KET NOI TELEGRAM: {e}")
 
 if __name__ == "__main__":
-    print("### BOT VERSION: v7-gemini-free-2026-07-16 ###")
+    print("### BOT VERSION: v8-gemini-telegram-fix-2026-07-16 ###")
     
     if not is_trading_day():
         print("Hom nay la cuoi tuan, thi truong dong cua. Dung bot.")
@@ -127,6 +131,5 @@ if __name__ == "__main__":
         print("Quet xong! AI dang tien hanh phan tich chuyen sau...")
         final_report = analyze_with_gemini(market_data)
         send_telegram(final_report)
-        print("Da gui bao cao thanh cong ve Telegram!")
     else:
         send_telegram("Canh bao: He thong khong the trich xuat du lieu tu Vnstock.")
