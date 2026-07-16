@@ -73,15 +73,17 @@ def fetch_market_and_fund_data():
             pct_change = ((latest_price - prev_price) / prev_price) * 100 if prev_price else 0
             fund_data_summary.append(f"- {fund_name}: {latest_price:,.2f} VND ({pct_change:+.2f}%)")
         else:
-            fund_data_summary.append(f"- {fund_name}: khong co du lieu (da thu {DATA_SOURCES})")
+            # ĐÃ SỬA CÓ DẤU
+            fund_data_summary.append(f"- {fund_name}: Không có dữ liệu (đã thử {DATA_SOURCES})")
 
     if not latest_index and not fund_data_summary:
         return None
 
+    # ĐÃ SỬA CÓ DẤU ĐỂ AI KHÔNG BẮT CHƯỚC VĂN PHONG KHÔNG DẤU
     market_context = (
-        f"Bao cao ngay: {end_date}\n"
-        f"Chi so VNINDEX: {latest_index.get('close', 'N/A')} (Khoi luong: {latest_index.get('volume', 'N/A')})\n"
-        f"Du lieu cac quy noi bat:\n" + "\n".join(fund_data_summary)
+        f"Báo cáo ngày: {end_date}\n"
+        f"Chỉ số VNINDEX: {latest_index.get('close', 'N/A')} (Khối lượng: {latest_index.get('volume', 'N/A')})\n"
+        f"Dữ liệu các quỹ nổi bật:\n" + "\n".join(fund_data_summary)
     )
     return market_context
 
@@ -89,11 +91,9 @@ def fetch_market_and_fund_data():
 # ======================= PHAN AI v13: FIX OUTPUT NGAN =======================
 
 def _build_prompt(raw_data, retry=False):
-    """Xay dung prompt cho AI.
-    v13: them vi du cu the, yeu cau so luong dong cu the, ep format."""
+    """Xay dung prompt cho AI."""
     if retry:
-        # Prompt don gian hon cho retry (phong tru prompt qua phuc tap gay "no idea")
-        return f"""Phan tich ngan gon thi truong chung khoan Viet Nam ngay hom nay.
+        return f"""Phân tích ngắn gọn thị trường chứng khoán Việt Nam ngày hôm nay.
 
 Dữ liệu:
 {raw_data}
@@ -138,9 +138,8 @@ YÊU CẦU:
 Dữ liệu thị trường:
 {raw_data}
 
-Chi tra ve ban tin, khong them bat ky giai thich nao.
-
-Hay bat dau viet ngay:"""
+Chỉ trả về bản tin, không thêm bất kỳ giải thích nào.
+Hãy bắt đầu viết ngay:"""
 
 
 def _try_single_request(url, payload, headers, model_name, endpoint_label):
@@ -149,12 +148,9 @@ def _try_single_request(url, payload, headers, model_name, endpoint_label):
         if response.status_code == 200:
             try:
                 data = response.json()
-                # Kiem tra co bi safety block khong
                 if 'candidates' not in data or not data['candidates']:
-                    # Lay finishReason neu co
                     return False, "empty_candidates_safety_blocked", response.status_code
                 candidate = data['candidates'][0]
-                # Kiem tra finishReason (STOP, MAX_TOKENS, SAFETY, RECITATION, OTHER)
                 finish_reason = candidate.get('finishReason', 'UNKNOWN')
                 if 'content' not in candidate or 'parts' not in candidate.get('content', {}):
                     return False, f"no_content_finish_{finish_reason}", response.status_code
@@ -205,7 +201,6 @@ def _discover_available_models():
 
 
 def _is_response_too_short(text, min_chars=200):
-    """Check neu response qua ngan (< 200 ky tu) - co the bi safety block hoac model loi."""
     if not text:
         return True
     cleaned = text.strip()
@@ -214,26 +209,20 @@ def _is_response_too_short(text, min_chars=200):
 
 def analyze_with_gemini(raw_data):
     if not GEMINI_API_KEY:
-        return "Loi: Chua cau hinh GEMINI_API_KEY tren GitHub Secrets."
+        return "Lỗi: Chưa cấu hình GEMINI_API_KEY trên GitHub Secrets."
 
     headers = {"Content-Type": "application/json"}
 
-    # ===== Prompt co ban =====
     prompt = _build_prompt(raw_data, retry=False)
 
-    # ===== Payload v13: maxOutputTokens 4000 + safety BLOCK_NONE =====
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.3,
-            "maxOutputTokens": 4000,   # TANG TU 800 -> 4000
+            "maxOutputTokens": 4000,
             "topP": 0.95,
             "topK": 40
         },
-        # ===== v13: TAT SAFETY FILTERS =====
-        # Mac dinh Gemini co the block mot so category: HARASSMENT, HATE_SPEECH,
-        # SEXUALLY_EXPLICIT, DANGEROUS_CONTENT. Dat BLOCK_NONE de dam bao
-        # phan tich tai chinh (rui ro, canh bao) khong bi chan.
         "safetySettings": [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -259,7 +248,6 @@ def analyze_with_gemini(raw_data):
         print("⚠️ Khong the listModels, su dung fallback list cu.")
         models_to_try = list(MODELS_FALLBACK)
 
-    # ===== Vong lap thu tung model =====
     error_logs = []
     for model in models_to_try:
         if model.startswith('gemini-1.5') or model == 'gemini-pro' or model == 'gemini-1.0-pro':
@@ -274,12 +262,10 @@ def analyze_with_gemini(raw_data):
             print(f"  -> Thu [{model}] tren {endpoint}...")
             ok, result, status = _try_single_request(url, payload, headers, model, endpoint)
             if ok:
-                # v13: Validate do dai response
                 if _is_response_too_short(result):
-                    print(f"  ⚠️ Response qua ngan ({len(result)} chars): '{result[:80]}...' - thu model khac")
+                    print(f"  ⚠️ Response qua ngan ({len(result)} chars) - thu model khac")
                     error_logs.append(f"[{model}/{endpoint}] TOO_SHORT: '{result[:100]}'")
-                    # KHONG break, thu model tiep theo (co the model nay bi loi)
-                    break  # break inner loop (v1beta cung se ngan)
+                    break
                 else:
                     print(f"✅ AI ket noi thanh cong voi model: {model} (endpoint: {endpoint}), {len(result)} chars")
                     return result
@@ -288,7 +274,6 @@ def analyze_with_gemini(raw_data):
                 if status == 404:
                     break
 
-    # ===== v13: RETRY VOI PROMPT DON GIAN HON =====
     print("⚠️ Tat ca model deu cho output ngan hoac loi. Thu lai voi prompt don gian...")
     simple_prompt = _build_prompt(raw_data, retry=True)
     payload_simple = {
@@ -321,7 +306,8 @@ def analyze_with_gemini(raw_data):
         except Exception:
             continue
 
-    return f"Loi toan bo he thong AI. Chi tiet: {', '.join(error_logs)}"
+    # ĐÃ SỬA CÓ DẤU
+    return f"Lỗi toàn bộ hệ thống AI. Chi tiết: {', '.join(error_logs)}"
 
 
 def send_telegram(text):
@@ -356,4 +342,5 @@ if __name__ == "__main__":
         final_report = analyze_with_gemini(market_data)
         send_telegram(final_report)
     else:
-        send_telegram("Canh bao: He thong khong the trich xuat du lieu tu Vnstock.")
+        # ĐÃ SỬA CÓ DẤU
+        send_telegram("Cảnh báo: Hệ thống không thể trích xuất dữ liệu từ Vnstock.")
