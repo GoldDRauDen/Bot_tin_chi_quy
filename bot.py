@@ -97,34 +97,40 @@ def _build_prompt(raw_data, retry=False):
 
 Du lieu:
 {raw_data}
-
-Hay viet 7-10 cau phan tich (tieng Viet khong dau, khong Markdown).
-Moi cau viet tren 1 dong rieng, bat dau bang emoji."""
-
+Hay viet 7-10 cau phan tich (tieng Viet CO dau, khong Markdown).
     return f"""Ban la chuyen gia phan tich tai chinh hang dau. Hay lap ban tin phan tich chi tiet cho thi truong chung khoan Viet Nam.
 
 QUY TAC BAT BUOC:
-1. TIENG VIET KHONG DAU (loai bo hoan toan dau tieng Viet: khong co "ế", "â", "ơ"... chi viet "e", "a", "o"...)
-2. KHONG dung ky tu Markdown: khong *, khong _, khong #, khong [], khong ```.
-3. Viet toi thieu 7 DONG, moi dong la 1 y phan tich doc lap.
-4. Moi dong bat dau bang 1 emoji de tao diem nhan.
+1. Dau ra phai la TIENG VIET CO DAU chuan Unicode UTF-8.
+2. Khong su dung Markdown: khong *, khong _, khong #, khong [], khong ```.
+3. Viet tu 7 den 10 dong, moi dong la mot y phan tich doc lap.
+4. Moi dong bat dau bang mot emoji.
+5. Moi dong chi gom mot cau ngan gon, de doc tren Messenger, Zalo hoac Telegram.
+6. Khong viet giai thich them truoc hoac sau ban tin.
 
-CAU TRUC BAN TIN (viet theo thu tu):
-- Dong 1 (emoji + 1 cau): Tong quan thi truong hom nay.
-- Dong 2 (emoji + 1 cau): Phan tich chi so VN-Index (xu huong, bien dong).
-- Dong 3 (emoji + 1 cau): Phan tich quy FUEVFVND (dong tien, suc manh).
-- Dong 4 (emoji + 1 cau): Phan tich quy E1VFVN30 (so voi FUEVFVND).
-- Dong 5 (emoji + 1 cau): Phan tich quy FUESSVFL (xu huong rieng).
-- Dong 6 (emoji + 1 cau): Nhan dinh dong tien lon trong ngay.
-- Dong 7 (emoji + 1 cau): Canh bao rui ro (rui ro thi truong, thanh khoan, bien dong).
-- Dong 8 (emoji + 1 cau): Goi y chien luoc cho nha dau tu (ngan han).
-- Dong 9 (emoji + 1 cau): Quy tiem nang nhat trong cac quy da phan tich va ly do.
-- Dong 10 (emoji + 1 cau): Ket luan tong the.
+CAU TRUC BAN TIN:
+📈 Dong 1: Tong quan thi truong hom nay.
+📊 Dong 2: Phan tich VN-Index (xu huong, bien dong).
+💰 Dong 3: Phan tich quy FUEVFVND (dong tien, suc manh).
+📉 Dong 4: Phan tich quy E1VFVN30 (so sanh voi FUEVFVND).
+🏦 Dong 5: Phan tich quy FUESSVFL (xu huong rieng).
+💵 Dong 6: Nhan dinh dong tien lon trong ngay.
+⚠️ Dong 7: Canh bao rui ro (thanh khoan, bien dong, ap luc ban).
+🎯 Dong 8: Goi y chien luoc ngan han cho nha dau tu.
+⭐ Dong 9: Quy tiem nang nhat trong cac quy da phan tich va ly do.
+📝 Dong 10: Ket luan tong the.
 
-LUU Y: Moi dong phai co NOI DUNG CU THE, khong viet chung chung. Su dung so lieu tu du lieu duoi day.
+YEU CAU NOI DUNG:
+- Phan tich dua tren so lieu duoc cung cap.
+- Neu mot quy hoac chi so khong co du lieu thi ghi ro "Khong co du lieu de danh gia", khong duoc tu suy dien.
+- Khong lap lai y giua cac dong.
+- Khong viet chung chung, moi dong phai co nhan dinh cu the.
+- Su dung cac gia tri va so lieu trong du lieu ben duoi neu co.
 
 Du lieu thi truong:
 {raw_data}
+
+Chi tra ve ban tin, khong them bat ky giai thich nao."""
 
 Hay bat dau viet ngay:"""
 
