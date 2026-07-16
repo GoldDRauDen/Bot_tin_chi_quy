@@ -1,29 +1,42 @@
 import os
-import traceback
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
-# Su dung kien truc Unified UI moi cua Vnstock v4
-from vnstock import Market 
+from vnstock import Vnstock 
 
+# ======================= CAU HINH BAO MAT =======================
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')    
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
+# ===============================================================
+
+def is_trading_day():
+    """Kiem tra xem hom nay co phai la ngay giao dich khong (Bo qua Thu 7, Chu Nhat)"""
+    today = datetime.now().weekday()
+    if today >= 5: # 5 la Thu 7, 6 la Chu Nhat
+        return False
+    return True
 
 def _get_history(symbol, start_date, end_date):
     """
-    Lay du lieu bang lop Market() cua Vnstock 4.x.
-    He thong se tu dong chon nguon data tot nhat.
+    Lay du lieu lich su voi co che Fallback (tu dong thu nhieu nguon).
+    Dung kien truc V4 moi nhat.
     """
-    market = Market()
     try:
-        # market.equity.ohlcv ho tro ca co phieu, chung chi quy va index
-        df = market.equity.ohlcv(symbol=symbol, start=start_date, end=end_date)
-        if df is not None and not df.empty:
-            df.columns = [str(c).lower() for c in df.columns]
-            return df
+        vn = Vnstock()
+        sources = ['VCI', 'TCBS', 'SSI']
+        
+        for source in sources:
+            try:
+                stock_api = vn.stock(symbol=symbol, source=source)
+                df = stock_api.quote.history(start=start_date, end=end_date)
+                if df is not None and not df.empty:
+                    df.columns = [str(c).lower() for c in df.columns]
+                    return df
+            except Exception:
+                continue # Loi nguon nay thi tu dong chuyen nguon khac
     except Exception as e:
-        print(f"Loi tai du lieu {symbol}: {e}")
+        print(f"Loi khoi tao Vnstock: {e}")
     return None
 
 def fetch_market_and_fund_data():
@@ -35,10 +48,8 @@ def fetch_market_and_fund_data():
     df_index = _get_history('VNINDEX', start_date, end_date)
     if df_index is not None and not df_index.empty:
         latest_index = df_index.iloc[-1].to_dict()
-    else:
-        print("Canh bao: Khong lay duoc du lieu VNINDEX.")
 
-    # 2. Lay du lieu cac Quy ETF
+    # 2. Lay du lieu Quy ETF
     funds = ['FUEVNVND', 'E1VFVN30', 'FUESSVFL']
     fund_data_summary = []
 
@@ -48,9 +59,7 @@ def fetch_market_and_fund_data():
             latest_price = df_fund.iloc[-1]['close']
             prev_price = df_fund.iloc[-2]['close'] if len(df_fund) > 1 else latest_price
             pct_change = ((latest_price - prev_price) / prev_price) * 100 if prev_price else 0
-            fund_data_summary.append(f"• {fund}: {latest_price:,.0f}d ({pct_change:+.2f}%)")
-        else:
-            print(f"Canh bao: Khong lay duoc du lieu cho {fund}.")
+            fund_data_summary.append(f"• {fund}: {latest_price:,.0f} VND ({pct_change:+.2f}%)")
 
     if not latest_index and not fund_data_summary:
         return None
@@ -72,15 +81,16 @@ def analyze_with_deepseek(raw_data):
         "Content-Type": "application/json"
     }
 
-    # Cap nhat prompt de DeepSeek tra ve bao cao hoan toan khong co dau
     prompt = f"""Ban la giam doc khoi phan tich quy dau tu.
-Dua tren du lieu thuc te duoi day, lap ban tin phan tich (7-10 dong).
+Dua tren du lieu thuc te duoi day, hay lap ban tin phan tich sang nay (7-10 dong).
 
-YEU CAU BAT BUOC: Toan bo cau tra loi phai viet bang tieng Viet khong dau (loai bo hoan toan dau tieng Viet) de dam bao khong bi loi font tren cac thiet bi. Dung dinh dang Markdown va cac emoji phu hop.
+YEU CAU BAT BUOC: Toan bo cau tra loi cua ban phai duoc viet bang TIENG VIET KHONG DAU (loai bo hoan toan dau tieng Viet) de tranh loi font.
 
+Noi dung can co:
 - Danh gia nhanh xu huong VN-Index.
 - Phan tich dong luc cua cac quy ETF (FUEVNVND, E1VFVN30...). 
 - Canh bao rui ro va chi ra quy tiem nang nhat.
+- Dung dinh dang Markdown va cac emoji phu hop.
 
 Du lieu:
 {raw_data}"""
@@ -99,7 +109,7 @@ Du lieu:
         else:
             return f"Loi API DeepSeek (Ma loi: {response.status_code})"
     except Exception as e:
-        return f"Loi ket noi he thong AI: {e}"
+        return f"Loi ket noi AI: {e}"
 
 def send_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -112,7 +122,13 @@ def send_telegram(text):
     requests.post(url, json=payload, timeout=15)
 
 if __name__ == "__main__":
-    print("### BOT VERSION: v3-vnstock-unified-2026-07-15 ###")
+    print("### BOT VERSION: v5-pro-2026-07-16 ###")
+    
+    if not is_trading_day():
+        print("Hom nay la cuoi tuan, thi truong dong cua. Dung bot.")
+        send_telegram("Thong bao: Hom nay la cuoi tuan, thi truong nghi giao dich. Bot tam dung quet du lieu.")
+        exit(0)
+
     print("Dang quet du lieu thi truong...")
     market_data = fetch_market_and_fund_data()
     
@@ -122,4 +138,4 @@ if __name__ == "__main__":
         send_telegram(final_report)
         print("Da gui bao cao thanh cong ve Telegram!")
     else:
-        send_telegram("⚠️ He thong cot loi gap su co: Khong the trich xuat du lieu tu Vnstock.")
+        send_telegram("Canh bao: He thong khong the trich xuat du lieu tu Vnstock.")
