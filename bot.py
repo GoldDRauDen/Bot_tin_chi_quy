@@ -64,7 +64,8 @@ def analyze_with_gemini(raw_data):
     if not GEMINI_API_KEY:
         return "Loi: Chua cau hinh GEMINI_API_KEY tren GitHub Secrets."
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    # FIX 404: Đã đổi tên model sang 'gemini-1.5-flash-latest' để tương thích API v1beta
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
 
     prompt = f"""Ban la giam doc khoi phan tich quy dau tu.
@@ -103,7 +104,6 @@ def send_telegram(text):
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": text,
-        # Bỏ parse_mode="Markdown" để tránh lỗi hắt hủi định dạng từ Telegram
         "disable_web_page_preview": True
     }
     
@@ -112,13 +112,12 @@ def send_telegram(text):
         if res.status_code == 200:
             print("✅ Da gui bao cao thanh cong ve Telegram!")
         else:
-            # In ra lỗi chi tiết để bắt bệnh nếu có
             print(f"❌ LOI GUI TELEGRAM (Ma loi {res.status_code}): {res.text}")
     except Exception as e:
         print(f"❌ LOI KET NOI TELEGRAM: {e}")
 
 if __name__ == "__main__":
-    print("### BOT VERSION: v8-gemini-telegram-fix-2026-07-16 ###")
+    print("### BOT VERSION: v9-gemini-model-fix-2026-07-16 ###")
     
     if not is_trading_day():
         print("Hom nay la cuoi tuan, thi truong dong cua. Dung bot.")
