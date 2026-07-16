@@ -11,37 +11,26 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 # ===============================================================
 
 # ======================= DANH SACH MODEL (CAP NHAT 2026) =======================
+# v13: Uu tien model 2.5 (on dinh) hon alias latest (co the la 3.x thinking model - giam tokens output)
 MODELS_FALLBACK = [
-    "gemini-flash-latest",
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash-lite",
-    "gemini-3.1-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-pro-latest",
+    "gemini-2.5-flash",            # UA TIEN #1: 2.5 flash - on dinh, output day du
+    "gemini-2.5-pro",              # 2.5 pro - chat luong cao
+    "gemini-flash-latest",         # alias flash
+    "gemini-2.5-flash-lite",       # nhe
+    "gemini-3.1-flash-lite",       # 3.x lite
+    "gemini-3.5-flash",            # 3.x flash
+    "gemini-pro-latest",           # alias pro
 ]
 # =============================================================================
 
 # ======================= FIX v12: SYMBOL + SOURCE =======================
-# Loi cu:
-#   1. Symbol "FUEVNVND" sai chinh ta -> phai la "FUEVFVND" (F thay vi N)
-#      (ETF VinaCapital VN30 - ky hieu chinh thuc tren HOSE la FUEVFVND)
-#   2. Source "TCBS" va "SSI" da bi loai bo khoi vnstock 4.0.4
-#      (chi con: kbs, vci, msn, dnse, binance, fmp, fmarket)
-#   3. KBS la nguon moi, rat on dinh cho ETF
-# ============================================================================
-
-# Symbol dung cua cac quy (theo HOSE)
 FUNDS_SYMBOLS = {
-    'FUEVFVND': 'FUEVFVND',  # SSIAM VinaCapital VN30 (FIX: cu la FUEVNVND - sai)
-    'E1VFVN30': 'E1VFVN30',  # VFMVN30 ETF (HSX)
-    'FUESSVFL': 'FUESSVFL',  # SSIAM VNFIN LEAD
+    'FUEVFVND': 'FUEVFVND',
+    'E1VFVN30': 'E1VFVN30',
+    'FUESSVFL': 'FUESSVFL',
 }
-
-# Nguon du lieu uu tien (vnstock 4.0.4+)
-# VCI: on dinh, support tot ETF
-# KBS: moi, rat on dinh, free
 DATA_SOURCES = ['KBS', 'VCI', 'MSN']
+# ============================================================================
 
 
 def is_trading_day():
@@ -52,16 +41,12 @@ def is_trading_day():
 
 
 def _get_history(symbol, start_date, end_date):
-    """Thu lay du lieu tu nhieu nguon, uu tien KBS (tot nhat cho ETF).
-    Tra ve DataFrame hoac None neu tat ca nguon fail."""
     for source in DATA_SOURCES:
         try:
             q = Quote(symbol=symbol, source=source)
             df = q.history(start=start_date, end=end_date, interval='1D')
             if df is not None and not df.empty:
-                # Chuan hoa column names ve lowercase
                 df.columns = [str(c).lower() for c in df.columns]
-                # Dam bao co cot 'close' (KBS tra 'close', VCI cung 'close')
                 if 'close' in df.columns:
                     return df
         except Exception:
@@ -70,22 +55,16 @@ def _get_history(symbol, start_date, end_date):
     return None
 
 
-def _get_index_history(symbol, start_date, end_date):
-    """Lay du lieu chi so (VNINDEX/...): giu nguyen logic cu vi VCI/KBS deu OK."""
-    return _get_history(symbol, start_date, end_date)
-
-
 def fetch_market_and_fund_data():
     end_date = datetime.now().strftime('%Y-%m-%d')
     start_date = (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d')
 
     latest_index = {}
-    df_index = _get_index_history('VNINDEX', start_date, end_date)
+    df_index = _get_history('VNINDEX', start_date, end_date)
     if df_index is not None and not df_index.empty:
         latest_index = df_index.iloc[-1].to_dict()
 
     fund_data_summary = []
-    # Dung key (display name) -> symbol that
     for fund_name, fund_symbol in FUNDS_SYMBOLS.items():
         df_fund = _get_history(fund_symbol, start_date, end_date)
         if df_fund is not None and not df_fund.empty:
@@ -94,7 +73,6 @@ def fetch_market_and_fund_data():
             pct_change = ((latest_price - prev_price) / prev_price) * 100 if prev_price else 0
             fund_data_summary.append(f"- {fund_name}: {latest_price:,.2f} VND ({pct_change:+.2f}%)")
         else:
-            # Ghi nhan de log, khong gay crash
             fund_data_summary.append(f"- {fund_name}: khong co du lieu (da thu {DATA_SOURCES})")
 
     if not latest_index and not fund_data_summary:
@@ -108,7 +86,48 @@ def fetch_market_and_fund_data():
     return market_context
 
 
-# ======================= PHAN AI (giu nguyen tu v11) =======================
+# ======================= PHAN AI v13: FIX OUTPUT NGAN =======================
+
+def _build_prompt(raw_data, retry=False):
+    """Xay dung prompt cho AI.
+    v13: them vi du cu the, yeu cau so luong dong cu the, ep format."""
+    if retry:
+        # Prompt don gian hon cho retry (phong tru prompt qua phuc tap gay "no idea")
+        return f"""Phan tich ngan gon thi truong chung khoan Viet Nam ngay hom nay.
+
+Du lieu:
+{raw_data}
+
+Hay viet 7-10 cau phan tich (tieng Viet khong dau, khong Markdown).
+Moi cau viet tren 1 dong rieng, bat dau bang emoji."""
+
+    return f"""Ban la chuyen gia phan tich tai chinh hang dau. Hay lap ban tin phan tich chi tiet cho thi truong chung khoan Viet Nam.
+
+QUY TAC BAT BUOC:
+1. TIENG VIET KHONG DAU (loai bo hoan toan dau tieng Viet: khong co "ế", "â", "ơ"... chi viet "e", "a", "o"...)
+2. KHONG dung ky tu Markdown: khong *, khong _, khong #, khong [], khong ```.
+3. Viet toi thieu 7 DONG, moi dong la 1 y phan tich doc lap.
+4. Moi dong bat dau bang 1 emoji de tao diem nhan.
+
+CAU TRUC BAN TIN (viet theo thu tu):
+- Dong 1 (emoji + 1 cau): Tong quan thi truong hom nay.
+- Dong 2 (emoji + 1 cau): Phan tich chi so VN-Index (xu huong, bien dong).
+- Dong 3 (emoji + 1 cau): Phan tich quy FUEVFVND (dong tien, suc manh).
+- Dong 4 (emoji + 1 cau): Phan tich quy E1VFVN30 (so voi FUEVFVND).
+- Dong 5 (emoji + 1 cau): Phan tich quy FUESSVFL (xu huong rieng).
+- Dong 6 (emoji + 1 cau): Nhan dinh dong tien lon trong ngay.
+- Dong 7 (emoji + 1 cau): Canh bao rui ro (rui ro thi truong, thanh khoan, bien dong).
+- Dong 8 (emoji + 1 cau): Goi y chien luoc cho nha dau tu (ngan han).
+- Dong 9 (emoji + 1 cau): Quy tiem nang nhat trong cac quy da phan tich va ly do.
+- Dong 10 (emoji + 1 cau): Ket luan tong the.
+
+LUU Y: Moi dong phai co NOI DUNG CU THE, khong viet chung chung. Su dung so lieu tu du lieu duoi day.
+
+Du lieu thi truong:
+{raw_data}
+
+Hay bat dau viet ngay:"""
+
 
 def _try_single_request(url, payload, headers, model_name, endpoint_label):
     try:
@@ -116,7 +135,16 @@ def _try_single_request(url, payload, headers, model_name, endpoint_label):
         if response.status_code == 200:
             try:
                 data = response.json()
-                text = data['candidates'][0]['content']['parts'][0]['text']
+                # Kiem tra co bi safety block khong
+                if 'candidates' not in data or not data['candidates']:
+                    # Lay finishReason neu co
+                    return False, "empty_candidates_safety_blocked", response.status_code
+                candidate = data['candidates'][0]
+                # Kiem tra finishReason (STOP, MAX_TOKENS, SAFETY, RECITATION, OTHER)
+                finish_reason = candidate.get('finishReason', 'UNKNOWN')
+                if 'content' not in candidate or 'parts' not in candidate.get('content', {}):
+                    return False, f"no_content_finish_{finish_reason}", response.status_code
+                text = candidate['content']['parts'][0]['text']
                 return True, text, 200
             except (KeyError, IndexError, ValueError) as parse_err:
                 return False, f"parse_error:{parse_err}", response.status_code
@@ -140,7 +168,6 @@ def _discover_available_models():
         url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
         r = requests.get(url, timeout=15)
         if r.status_code != 200:
-            print(f"⚠️ listModels that bai (HTTP {r.status_code})")
             return None
         data = r.json()
         models = data.get('models', [])
@@ -159,37 +186,47 @@ def _discover_available_models():
                 continue
             valid.append(short)
         return valid
-    except Exception as e:
-        print(f"⚠️ listModels exception: {e}")
+    except Exception:
         return None
+
+
+def _is_response_too_short(text, min_chars=200):
+    """Check neu response qua ngan (< 200 ky tu) - co the bi safety block hoac model loi."""
+    if not text:
+        return True
+    cleaned = text.strip()
+    return len(cleaned) < min_chars
 
 
 def analyze_with_gemini(raw_data):
     if not GEMINI_API_KEY:
         return "Loi: Chua cau hinh GEMINI_API_KEY tren GitHub Secrets."
 
-    prompt = f"""Ban la giam doc khoi phan tich quy dau tu.
-Dua tren du lieu thuc te duoi day, hay lap ban tin phan tich (7-10 dong).
+    headers = {"Content-Type": "application/json"}
 
-YEU CAU BAT BUOC 1: Toan bo cau tra loi cua ban phai duoc viet bang TIENG VIET KHONG DAU (loai bo hoan toan dau tieng Viet) de tranh loi phong.
-YEU CAU BAT BUOC 2: KHONG dung cac ky tu Markdown nhu dau sao (*), dau gach duoi (_), dau thang (#). Chi dung van ban thuong va emoji.
+    # ===== Prompt co ban =====
+    prompt = _build_prompt(raw_data, retry=False)
 
-Noi dung can co:
-- Danh gia nhanh xu huong VN-Index.
-- Phan tich dong luc cua cac quy ETF.
-- Canh bao rui ro va chi ra quy tiem nang nhat.
-
-Du lieu:
-{raw_data}"""
-
+    # ===== Payload v13: maxOutputTokens 4000 + safety BLOCK_NONE =====
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
-            "temperature": 0.2,
-            "maxOutputTokens": 800
-        }
+            "temperature": 0.3,
+            "maxOutputTokens": 4000,   # TANG TU 800 -> 4000
+            "topP": 0.95,
+            "topK": 40
+        },
+        # ===== v13: TAT SAFETY FILTERS =====
+        # Mac dinh Gemini co the block mot so category: HARASSMENT, HATE_SPEECH,
+        # SEXUALLY_EXPLICIT, DANGEROUS_CONTENT. Dat BLOCK_NONE de dam bao
+        # phan tich tai chinh (rui ro, canh bao) khong bi chan.
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
     }
-    headers = {"Content-Type": "application/json"}
 
     print("Dang kiem tra danh sach model kha dung cho API key...")
     discovered = _discover_available_models()
@@ -208,6 +245,7 @@ Du lieu:
         print("⚠️ Khong the listModels, su dung fallback list cu.")
         models_to_try = list(MODELS_FALLBACK)
 
+    # ===== Vong lap thu tung model =====
     error_logs = []
     for model in models_to_try:
         if model.startswith('gemini-1.5') or model == 'gemini-pro' or model == 'gemini-1.0-pro':
@@ -222,12 +260,52 @@ Du lieu:
             print(f"  -> Thu [{model}] tren {endpoint}...")
             ok, result, status = _try_single_request(url, payload, headers, model, endpoint)
             if ok:
-                print(f"✅ AI ket noi thanh cong voi model: {model} (endpoint: {endpoint})")
-                return result
+                # v13: Validate do dai response
+                if _is_response_too_short(result):
+                    print(f"  ⚠️ Response qua ngan ({len(result)} chars): '{result[:80]}...' - thu model khac")
+                    error_logs.append(f"[{model}/{endpoint}] TOO_SHORT: '{result[:100]}'")
+                    # KHONG break, thu model tiep theo (co the model nay bi loi)
+                    break  # break inner loop (v1beta cung se ngan)
+                else:
+                    print(f"✅ AI ket noi thanh cong voi model: {model} (endpoint: {endpoint}), {len(result)} chars")
+                    return result
             else:
                 error_logs.append(f"[{model}/{endpoint}] {result}")
                 if status == 404:
                     break
+
+    # ===== v13: RETRY VOI PROMPT DON GIAN HON =====
+    print("⚠️ Tat ca model deu cho output ngan hoac loi. Thu lai voi prompt don gian...")
+    simple_prompt = _build_prompt(raw_data, retry=True)
+    payload_simple = {
+        "contents": [{"parts": [{"text": simple_prompt}]}],
+        "generationConfig": {
+            "temperature": 0.3,
+            "maxOutputTokens": 4000
+        },
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+    }
+
+    for model in models_to_try:
+        if model.startswith('gemini-1.5') or model == 'gemini-pro' or model == 'gemini-1.0-pro':
+            continue
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+        try:
+            response = requests.post(url, json=payload_simple, headers=headers, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('candidates'):
+                    text = data['candidates'][0].get('content', {}).get('parts', [{}])[0].get('text', '')
+                    if not _is_response_too_short(text):
+                        print(f"✅ Retry thanh cong voi [{model}], {len(text)} chars")
+                        return text
+        except Exception:
+            continue
 
     return f"Loi toan bo he thong AI. Chi tiet: {', '.join(error_logs)}"
 
@@ -250,7 +328,7 @@ def send_telegram(text):
 
 
 if __name__ == "__main__":
-    print("### BOT VERSION: v12-symbol-source-fix-2026-07-16 ###")
+    print("### BOT VERSION: v13-output-length-fix-2026-07-16 ###")
 
     if not is_trading_day():
         print("Hom nay la cuoi tuan, thi truong dong cua. Dung bot.")
