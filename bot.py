@@ -2,49 +2,47 @@ import os
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
-# Import dung chuan vnstock.api de sach log va khong bi spam canh bao
 from vnstock.api.quote import Quote 
 
 # ======================= CAU HINH BAO MAT =======================
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')    
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
+# Chuyen sang dung Gemini API mien phi
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 # ===============================================================
 
 def is_trading_day():
-    """Kiem tra xem hom nay co phai la ngay giao dich khong (Bo qua Thu 7, Chu Nhat)"""
     today = datetime.now().weekday()
-    if today >= 5: # 5 la Thu 7, 6 la Chu Nhat
+    if today >= 5: 
         return False
     return True
 
 def _get_history(symbol, start_date, end_date):
     """
-    Lay du lieu dung chuan vnstock.api.
-    Su dung nguon VCI theo dung thong bao va huong dan tu Vnstock V4 core.
+    Lay du lieu kem co che tu dong chuyen nguon (Fallback) neu nguon chinh bi loi
     """
-    try:
-        # Ap dung cu phap New tuong thich 100% voi ban open-source hien tai
-        q = Quote(symbol=symbol, source='VCI')
-        df = q.history(start=start_date, end=end_date, interval='1D')
-        if df is not None and not df.empty:
-            df.columns = [str(c).lower() for c in df.columns]
-            return df
-    except Exception as e:
-        print(f"Loi khi tai ma {symbol}: {e}")
+    sources = ['VCI', 'TCBS', 'SSI']
+    for source in sources:
+        try:
+            q = Quote(symbol=symbol, source=source)
+            df = q.history(start=start_date, end=end_date, interval='1D')
+            if df is not None and not df.empty:
+                df.columns = [str(c).lower() for c in df.columns]
+                return df
+        except Exception:
+            continue # Loi thi am tham bo qua va thu nguon tiep theo
+    print(f"Loi: Khong the lay du lieu {symbol} tu tat ca cac nguon.")
     return None
 
 def fetch_market_and_fund_data():
     end_date = datetime.now().strftime('%Y-%m-%d')
     start_date = (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d')
 
-    # 1. Lay du lieu VNINDEX
     latest_index = {}
     df_index = _get_history('VNINDEX', start_date, end_date)
     if df_index is not None and not df_index.empty:
         latest_index = df_index.iloc[-1].to_dict()
 
-    # 2. Lay du lieu Quy ETF
     funds = ['FUEVNVND', 'E1VFVN30', 'FUESSVFL']
     fund_data_summary = []
 
@@ -66,18 +64,16 @@ def fetch_market_and_fund_data():
     )
     return market_context
 
-def analyze_with_deepseek(raw_data):
-    if not DEEPSEEK_API_KEY:
-        return "Loi: Chua cau hinh API Key cho DeepSeek."
+def analyze_with_gemini(raw_data):
+    """Phan tich du lieu bang Google Gemini 1.5 Flash (Mien phi)"""
+    if not GEMINI_API_KEY:
+        return "Loi: Chua cau hinh GEMINI_API_KEY tren GitHub Secrets."
 
-    url = "https://api.deepseek.com/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    headers = {"Content-Type": "application/json"}
 
     prompt = f"""Ban la giam doc khoi phan tich quy dau tu.
-Dua tren du lieu thuc te duoi day, hay lap ban tin phan tich sang nay (7-10 dong).
+Dua tren du lieu thuc te duoi day, hay lap ban tin phan tich (7-10 dong).
 
 YEU CAU BAT BUOC: Toan bo cau tra loi cua ban phai duoc viet bang TIENG VIET KHONG DAU (loai bo hoan toan dau tieng Viet) de tranh loi font.
 
@@ -91,20 +87,21 @@ Du lieu:
 {raw_data}"""
 
     payload = {
-        "model": "deepseek-chat",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2,
-        "max_tokens": 800
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 800
+        }
     }
 
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=30)
         if response.status_code == 200:
-            return response.json()['choices'][0]['message']['content']
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
         else:
-            return f"Loi API DeepSeek (Ma loi: {response.status_code})"
+            return f"Loi API Gemini (Ma loi: {response.status_code}) - {response.text}"
     except Exception as e:
-        return f"Loi ket noi AI: {e}"
+        return f"Loi ket noi he thong AI: {e}"
 
 def send_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -117,7 +114,7 @@ def send_telegram(text):
     requests.post(url, json=payload, timeout=15)
 
 if __name__ == "__main__":
-    print("### BOT VERSION: v6-clean-api-2026-07-16 ###")
+    print("### BOT VERSION: v7-gemini-free-2026-07-16 ###")
     
     if not is_trading_day():
         print("Hom nay la cuoi tuan, thi truong dong cua. Dung bot.")
@@ -127,8 +124,8 @@ if __name__ == "__main__":
     market_data = fetch_market_and_fund_data()
     
     if market_data:
-        print("AI dang tien hanh phan tich chuyen sau...")
-        final_report = analyze_with_deepseek(market_data)
+        print("Quet xong! AI dang tien hanh phan tich chuyen sau...")
+        final_report = analyze_with_gemini(market_data)
         send_telegram(final_report)
         print("Da gui bao cao thanh cong ve Telegram!")
     else:
