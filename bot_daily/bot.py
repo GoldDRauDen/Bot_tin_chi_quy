@@ -13,8 +13,8 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 # ======================= DANH SACH MODEL (CAP NHAT 2026) =======================
 # v13: Uu tien model 2.5 (on dinh) hon alias latest (co the la 3.x thinking model - giam tokens output)
 MODELS_FALLBACK = [
-    "gemini-2.5-flash",            # UA TIEN #1: 2.5 flash - on dinh, output day du
     "gemini-2.5-pro",              # 2.5 pro - chat luong cao
+    "gemini-2.5-flash",            # UA TIEN #1: 2.5 flash - on dinh, output day du
     "gemini-flash-latest",         # alias flash
     "gemini-2.5-flash-lite",       # nhe
     "gemini-3.1-flash-lite",       # 3.x lite
