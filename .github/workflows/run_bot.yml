@@ -23,6 +23,7 @@ jobs:
 
     # Bước 3: Cài đặt vnstock và các thư viện liên quan
     - name: Install Dependencies
+      working-directory: ./bot_daily
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
