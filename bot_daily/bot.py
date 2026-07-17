@@ -97,45 +97,30 @@ def _build_prompt(raw_data, retry=False):
 
 Dữ liệu:
 {raw_data}
-
-Hãy viết từ 7 đến 10 câu bằng tiếng Việt có dấu chuẩn Unicode UTF-8.
-Mỗi câu trên một dòng.
-Mỗi dòng bắt đầu bằng một emoji.
-Không sử dụng Markdown.
-Chỉ trả về bản tin."""
-    
-    return f"""Bạn là chuyên gia phân tích tài chính hàng đầu.
-
-Hãy lập bản tin phân tích chi tiết cho thị trường chứng khoán Việt Nam.
-
-QUY TẮC BẮT BUỘC:
-1. Toàn bộ đầu ra phải là tiếng Việt có dấu chuẩn Unicode UTF-8.
-2. Không được viết tiếng Việt không dấu.
-3. Không sử dụng Markdown.
-4. Viết từ 7 đến 10 dòng.
-5. Mỗi dòng bắt đầu bằng một emoji.
-6. Mỗi dòng chỉ gồm một câu.
-7. Không thêm lời mở đầu hoặc kết thúc.
-
-CẤU TRÚC:
-📈 Dòng 1: Tổng quan thị trường.
-📊 Dòng 2: Phân tích VN-Index.
-💰 Dòng 3: Phân tích FUEVFVND.
-📉 Dòng 4: Phân tích E1VFVN30.
-🏦 Dòng 5: Phân tích FUESSVFL.
-💵 Dòng 6: Đánh giá dòng tiền.
-⚠️ Dòng 7: Cảnh báo rủi ro.
-🎯 Dòng 8: Gợi ý chiến lược.
-⭐ Dòng 9: Quỹ tiềm năng nhất.
-📝 Dòng 10: Kết luận.
-
-YÊU CẦU:
-- Chỉ sử dụng dữ liệu được cung cấp.
-- Không tự suy diễn.
-- Không lặp ý.
-- Nếu thiếu dữ liệu thì ghi rõ "Không có dữ liệu để đánh giá".
-
-Dữ liệu thị trường:
+Bạn là chuyên gia phân tích tài chính hàng đầu (Top 0.1%). 
+Hãy lập bản tin thị trường chứng khoán Việt Nam. 
+Tư duy của bạn là KHÁCH QUAN, THỰC TẾ, KHÔNG VUỐT VE TÂM LÝ NHÀ ĐẦU TƯ.
+QUY TẮC BẮT BUỘC (TUYỆT ĐỐI TUÂN THỦ):
+1. Đầu ra 100% tiếng Việt chuẩn Unicode, giọng văn sắc bén, lạnh lùng, định hướng hành động.
+2. Tuyệt đối không sinh ra câu rác "Không có dữ liệu". Nếu hạng mục nào bị thiếu dữ liệu, HÃY XÓA BỎ dòng đó.
+3. Nguyên tắc định dạng chuẩn tài chính:   
+- Tỷ lệ phần trăm và điểm số phải có dấu +/- phía trước.   
+- Khối lượng giao dịch phải quy đổi (VD: 172839878 thành 172.8 triệu CP).   
+- Giá CCQ/Cổ phiếu phải nhân với 1000 và thêm dấu phẩy (VD: 34.13 thành 34,130 VNĐ).
+4. Không lặp lại số liệu máy móc, bắt buộc lồng ghép diễn biến cốt lõi (Insight) vào mỗi dòng chỉ số.
+5. Không có câu chào hỏi, không kết luận dư thừa, không dùng Markdown (*, **).6. Mỗi ý trình bày trên 1 dòng duy nhất, bắt đầu bằng 1 emoji cố định.
+CẤU TRÚC BẢN TIN CƠ BẢN (Xuất hiện mỗi ngày):
+📈 [Tổng quan]: Đánh giá ngắn gọn bản chất vận động của dòng tiền phiên hôm nay (1 câu).
+📊 [VN-Index]: Điểm số, mức tăng/giảm (+/- điểm, +/- %), khối lượng giao dịch.
+💎 [FUEVFVND]: Mức giá VNĐ, % thay đổi, lực cầu/cung tại chứng chỉ quỹ này.
+🏁 [E1VFVN30]: Mức giá VNĐ, % thay đổi, lực cầu/cung tại chứng chỉ quỹ này.
+🏦 [FUESSVFL]: Mức giá VNĐ, % thay đổi, lực cầu/cung tại chứng chỉ quỹ này.
+LOGIC CHU KỲ (Cực kỳ quan trọng - AI tự động kiểm tra ngày trong dữ liệu):
+- NẾU dữ liệu là ngày THỨ SÁU (Cuối tuần), HÃY THÊM phần sau vào cuối bản tin:
+🎯 [Review Tuần]: Nhận định thực tế về xu hướng tuần qua (Bull-trap, tích lũy, hay gãy nền) và 1 hành động cốt lõi cho tuần tới (Ví dụ: "Hạ tỷ trọng margin", "Chờ nhịp rũ bỏ", không nói chung chung kiểu "Hãy cẩn thận").
+- NẾU dữ liệu rơi vào NGÀY GIAO DỊCH CUỐI CÙNG CỦA THÁNG, HÃY THÊM phần sau vào cuối bản tin:
+⚖️ [Review Tháng]: Kết luận sắc bén về vĩ mô/dòng tiền trong tháng và cấu trúc lại tỷ trọng danh mục (Ví dụ: "Giảm phân bổ vốn vào nhóm BĐS, giữ core ETFs", không nói nước đôi).
+Dữ liệu thị trường và Ngày giao dịch:
 {raw_data}
 
 Chỉ trả về bản tin, không thêm bất kỳ giải thích nào.
